@@ -4,6 +4,12 @@
 #include "Layers/xrRender/ShaderResourceTraits.h"
 #include "xrCore/FileCRC32.h"
 
+#pragma comment(lib, "d3dcompiler.lib")
+
+#include <d3dcompiler.h>
+#define HLSLCC_DYNLIB
+#include "HLSLcc/include/hlslcc.h"
+
 void CRender::addShaderOption(const char* name, const char* value)
 {
     m_ShaderOptions += "#define ";
@@ -137,22 +143,118 @@ public:
 class shader_options_holder
 {
     size_t pos{};
-    string512 m_options[128];
+    string512 m_options_string[128];
+    D3D_SHADER_MACRO m_options[128];
 
 public:
     void add(cpcstr name, cpcstr value)
     {
-        // It's important to have postfix increment!
-        xr_sprintf(m_options[pos++], "#define %s\t%s\n", name, value);
+        //// It's important to have postfix increment!
+        xr_sprintf(m_options_string[pos++], "#define %s\t%s\n", name, value);
+        m_options[pos] = { name, value };
+        ++pos;
     }
 
     void finish()
     {
-        m_options[pos][0] = '\0';
+        m_options_string[pos][0] = '\0';
+        m_options[pos] = { nullptr, nullptr };
     }
 
+    D3D_SHADER_MACRO* data() { return m_options; }
+
     [[nodiscard]] size_t size() const { return pos; }
-    string512& operator[](size_t idx) { return m_options[idx]; }
+    string512& operator[](size_t idx) { return m_options_string[idx]; }
+};
+
+class d3d_compiler_includer : public ID3DInclude
+{
+public:
+    HRESULT __stdcall Open(
+        D3D_INCLUDE_TYPE IncludeType, LPCSTR pFileName, LPCVOID pParentData, LPCVOID* ppData, UINT* pBytes) override
+    {
+        string_path pname;
+        strconcat(sizeof(pname), pname, GEnv.Render->getShaderPath(), pFileName);
+        IReader* R = FS.r_open("$game_shaders$", pname);
+        if (nullptr == R)
+        {
+            // possibly in shared directory or somewhere else - open directly
+            R = FS.r_open("$game_shaders$", pFileName);
+            if (nullptr == R)
+                return E_FAIL;
+        }
+
+        // duplicate and zero-terminate
+        const size_t size = R->length();
+        u8* data = xr_alloc<u8>(size + 1);
+        CopyMemory(data, R->pointer(), size);
+        data[size] = 0;
+        FS.r_close(R);
+
+        *ppData = data;
+        *pBytes = size;
+        return S_OK;
+    }
+
+    HRESULT __stdcall Close(LPCVOID pData) override
+    {
+        xr_free(pData);
+        return S_OK;
+    }
+};
+
+
+class hlslcc_reflection_manager : public HLSLccReflection
+{
+public:
+    void OnDiagnostics(const std::string& error, int line, bool isError) override
+    {
+        if (isError)
+            Msg("! [%d] %s", line, error.c_str());
+        else
+            Msg("~ [%d] %s", line, error.c_str());
+    }
+};
+
+class hlslcc_shader_compiler
+{
+    d3d_compiler_includer m_includer;
+    hlslcc_reflection_manager m_reflection;
+    cpcstr m_entry_point;
+    cpcstr m_target;
+    u32 m_flags;
+    IReader* m_file;
+    shader_options_holder& m_options;
+    ID3DBlob* m_blob;
+    GLSLShader m_shader;
+
+public:
+    hlslcc_shader_compiler(IReader* file, shader_options_holder& options, cpcstr entry_point, cpcstr target, u32 flags)
+        : m_file(file), m_options(options), m_entry_point(entry_point), m_target(target), m_flags(flags)
+    {
+        ID3DBlob* pErrorBuf{};
+
+        // xs_2_0 -> xs_5_0
+        string16 new_target;
+        xr_strcpy(new_target, m_target);
+        new_target[3] = '5';
+
+        auto result = D3DCompile(m_file->pointer(), m_file->length(), "", m_options.data(),
+            &m_includer, m_entry_point, new_target, m_flags, 0, &m_blob, &pErrorBuf);
+    }
+
+    bool compile()
+    {
+        if (!m_blob)
+            return false;
+        HLSLccSamplerPrecisionInfo precisions;
+        GlExtensions extensions;
+        u32 flags = HLSLCC_FLAG_REMOVE_UNUSED_GLOBALS;
+        TranslateHLSLFromMem((pcstr)m_blob->GetBufferPointer(), flags, LANG_DEFAULT, &extensions, nullptr, precisions, m_reflection, &m_shader);
+        return true;
+    }
+
+    const GLSLShader* shader() const { return &m_shader; }
 };
 
 class shader_sources_manager
@@ -172,6 +274,7 @@ public:
     {
         // Free string resources
         xr_free(m_sources);
+
         for (pstr include : m_includes)
             xr_free(include);
         m_source.clear();
@@ -180,7 +283,7 @@ public:
 
     [[nodiscard]] auto get() const { return m_sources; }
     [[nodiscard]] auto length() const { return m_sources_lines; }
-
+    
     [[nodiscard]] static constexpr bool optimized()
     {
 #ifdef DEBUG
@@ -188,6 +291,20 @@ public:
 #else
         return true;
 #endif
+    }
+
+    void compile(hlslcc_shader_compiler& hlslcc_compiler)
+    {
+        const std::string& shader = hlslcc_compiler.shader()->sourceCode;
+
+        const size_t size = shader.size();
+        cpstr string = xr_alloc<char>(size);
+        CopyMemory(string, shader.c_str(), size);
+        m_includes.emplace_back(string);
+
+        // hack
+        m_sources = const_cast<pcstr*>(m_includes.data());
+        m_sources_lines = m_includes.size();
     }
 
     void compile(IReader* file, shader_options_holder& options)
@@ -274,10 +391,6 @@ HRESULT CRender::shader_compile(LPCSTR name, IReader* fs, LPCSTR pFunctionName,
     string32 c_sun_shafts;
     string32 c_ssao;
     string32 c_sun_quality;
-
-    // TODO: OGL: Implement these parameters.
-    UNUSED(pFunctionName);
-    UNUSED(Flags);
 
     // options:
     const auto appendShaderOption = [&](u32 option, cpcstr macro, cpcstr value)
@@ -532,7 +645,7 @@ HRESULT CRender::shader_compile(LPCSTR name, IReader* fs, LPCSTR pFunctionName,
 
     u32 fileCrc = 0;
     string_path filename, full_path;
-    strconcat(sizeof(filename), filename, "gl" DELIMITER, name, ".", extension, DELIMITER, sh_name.c_str());
+    strconcat(sizeof(filename), filename, "r4" DELIMITER, name, ".", extension, DELIMITER, sh_name.c_str());
     if (HW.ShaderBinarySupported)
     {
         string_path file;
@@ -547,7 +660,7 @@ HRESULT CRender::shader_compile(LPCSTR name, IReader* fs, LPCSTR pFunctionName,
     }
 
     GLuint program = 0;
-    if (HW.ShaderBinarySupported && FS.exist(full_path))
+    if (false && HW.ShaderBinarySupported && FS.exist(full_path))
     {
         IReader* file = FS.r_open(full_path);
         if (file->length() > 8)
@@ -581,7 +694,16 @@ HRESULT CRender::shader_compile(LPCSTR name, IReader* fs, LPCSTR pFunctionName,
     {
         // Compile sources list
         shader_sources_manager sources(name);
-        sources.compile(fs, options);
+        if (true)
+        {
+            hlslcc_shader_compiler compiler(fs, options, pFunctionName, pTarget, Flags);
+            compiler.compile();
+            sources.compile(compiler);
+        }
+        else
+        {
+            sources.compile(fs, options);
+        }
 
         // Compile the shader from sources
         program = create_shader(pTarget, sources.get(), sources.length(), filename, result, nullptr);

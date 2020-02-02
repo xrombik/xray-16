@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Mixed|Win32">
+      <Configuration>Mixed</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Mixed|x64">
+      <Configuration>Mixed</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>15.0</VCProjectVersion>
+    <ProjectGuid>{E62ABC0A-8477-4363-A9A0-F11257BB5951}</ProjectGuid>
+    <RootNamespace>HLSLcc</RootNamespace>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <Import Project="$(SolutionDir)Common.props" />
+  <PropertyGroup Label="Globals">
+    <WindowsTargetPlatformVersion>$(xrTargetPlatform)</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>$(xrPlatformToolset)</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\src\Common.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp14</LanguageStandard>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <AdditionalIncludeDirectories>$(xrExternals)HLSLcc\;$(xrExternals)HLSLcc\include;$(xrExternals)HLSLcc\src\cbstring;$(xrExternals)HLSLcc\src\internal_includes;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>HLSLCC_DYNLIB;libHLSLcc_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="HLSLcc\src\cbstring\bsafe.c" />
+    <ClCompile Include="HLSLcc\src\cbstring\bstraux.c" />
+    <ClCompile Include="HLSLcc\src\cbstring\bstrlib.c" />
+    <ClCompile Include="HLSLcc\src\ControlFlowGraph.cpp" />
+    <ClCompile Include="HLSLcc\src\ControlFlowGraphUtils.cpp" />
+    <ClCompile Include="HLSLcc\src\DataTypeAnalysis.cpp" />
+    <ClCompile Include="HLSLcc\src\Declaration.cpp" />
+    <ClCompile Include="HLSLcc\src\decode.cpp" />
+    <ClCompile Include="HLSLcc\src\HLSLcc.cpp" />
+    <ClCompile Include="HLSLcc\src\HLSLccToolkit.cpp" />
+    <ClCompile Include="HLSLcc\src\HLSLCrossCompilerContext.cpp" />
+    <ClCompile Include="HLSLcc\src\Instruction.cpp" />
+    <ClCompile Include="HLSLcc\src\LoopTransform.cpp" />
+    <ClCompile Include="HLSLcc\src\Operand.cpp" />
+    <ClCompile Include="HLSLcc\src\reflect.cpp" />
+    <ClCompile Include="HLSLcc\src\Shader.cpp" />
+    <ClCompile Include="HLSLcc\src\ShaderInfo.cpp" />
+    <ClCompile Include="HLSLcc\src\toGLSL.cpp" />
+    <ClCompile Include="HLSLcc\src\toGLSLDeclaration.cpp" />
+    <ClCompile Include="HLSLcc\src\toGLSLInstruction.cpp" />
+    <ClCompile Include="HLSLcc\src\toGLSLOperand.cpp" />
+    <ClCompile Include="HLSLcc\src\toMetal.cpp" />
+    <ClCompile Include="HLSLcc\src\toMetalDeclaration.cpp" />
+    <ClCompile Include="HLSLcc\src\toMetalInstruction.cpp" />
+    <ClCompile Include="HLSLcc\src\toMetalOperand.cpp" />
+    <ClCompile Include="HLSLcc\src\UseDefineChains.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="HLSLcc\src\HLSLccTypes.natvis" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="HLSLcc\src\cbstring\bsafe.h" />
+    <ClInclude Include="HLSLcc\src\cbstring\bstraux.h" />
+    <ClInclude Include="HLSLcc\src\cbstring\bstrlib.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\ControlFlowGraph.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\ControlFlowGraphUtils.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\DataTypeAnalysis.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\debug.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\Declaration.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\decode.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\HLSLccToolkit.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\HLSLCrossCompilerContext.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\Instruction.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\languages.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\LoopTransform.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\Operand.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\reflect.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\Shader.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\toGLSL.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\toGLSLOperand.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\tokens.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\toMetal.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\toMetalDeclaration.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\Translator.h" />
+    <ClInclude Include="HLSLcc\src\internal_includes\UseDefineChains.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="HLSLcc\src\cbstring\bstrlib.txt" />
+    <Text Include="HLSLcc\src\cbstring\license.txt" />
+    <Text Include="HLSLcc\src\cbstring\porting.txt" />
+    <Text Include="HLSLcc\src\cbstring\security.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\src\xrCore\Memory\xrMemoryLib.vcxproj">
+      <Project>{7504230a-d973-4f75-8dfe-659b0d9f9d3a}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\src\xrCore\xrCore.vcxproj">
+      <Project>{a0f7d1fb-59a7-4717-a7e4-96f37e91998e}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
