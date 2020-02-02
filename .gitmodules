@@ -46,3 +46,6 @@
 [submodule "Externals/mimalloc"]
 	path = Externals/mimalloc
 	url = https://github.com/microsoft/mimalloc.git
+[submodule "Externals/HLSLcc"]
+	path = Externals/HLSLcc
+	url = https://github.com/Unity-Technologies/HLSLcc.git
