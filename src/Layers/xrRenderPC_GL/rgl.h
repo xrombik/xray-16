@@ -296,7 +296,7 @@ public:
 
     // Information
     void DumpStatistics(class IGameFont& font, class IPerformanceAlert* alert) override;
-    LPCSTR getShaderPath() override { return "gl" DELIMITER; }
+    LPCSTR getShaderPath() override { return "r3" DELIMITER; }
     virtual ref_shader getShader(int id);
     IRender_Sector* getSector(int id) override;
     IRenderVisual* getVisual(int id) override;

@@ -4,6 +4,9 @@
 #include "Layers/xrRender/ShaderResourceTraits.h"
 #include "xrCore/FileCRC32.h"
 
+#include <glslang/SPIRV/GlslangToSpv.h>
+#include <glslang/StandAlone/ResourceLimits.h>
+
 void CRender::addShaderOption(const char* name, const char* value)
 {
     m_ShaderOptions += "#define ";
@@ -151,8 +154,61 @@ public:
         m_options[pos][0] = '\0';
     }
 
+    xr_string get_preamble()
+    {
+        xr_string result;
+        for (size_t i = 0; i < pos; i++)
+        {
+            result += m_options[i];
+        }
+        return result;
+    }
+
     [[nodiscard]] size_t size() const { return pos; }
     string512& operator[](size_t idx) { return m_options[idx]; }
+};
+
+class Includer : public glslang::TShader::Includer
+{
+public:
+    IncludeResult* createResult(const char* headerName, IReader& file)
+    {
+        // duplicate and zero-terminate
+        const size_t size = file.length();
+        char* data = xr_alloc<char>(size + 1);
+        CopyMemory(data, file.pointer(), size);
+        data[size] = 0;
+        file.close();
+
+        return new IncludeResult(headerName, data, size, data);
+    }
+
+    IncludeResult* includeSystem(const char* headerName, const char* /*includerName*/, size_t /*inclusionDepth*/) override
+    {
+        // possibly in shared directory or somewhere else - open directly
+        IReader* file = FS.r_open("$game_shaders$", headerName);
+        if (!file)
+            return nullptr;
+
+        return createResult(headerName, *file);
+    }
+
+    IncludeResult* includeLocal(const char* headerName, const char* /*includerName*/, size_t /*inclusionDepth*/) override
+    {
+        string_path pname;
+        strconcat(pname, GEnv.Render->getShaderPath(), headerName);
+        IReader* file = FS.r_open("$game_shaders$", pname);
+        if (!file)
+            return nullptr;
+
+        return createResult(headerName, *file);
+    }
+
+    void releaseInclude(IncludeResult* pResult) override
+    {
+        xr_free(pResult->userData);
+        xr_delete(pResult);
+    }
 };
 
 class shader_sources_manager
@@ -547,7 +603,7 @@ HRESULT CRender::shader_compile(LPCSTR name, IReader* fs, LPCSTR pFunctionName,
     }
 
     GLuint program = 0;
-    if (HW.ShaderBinarySupported && FS.exist(full_path))
+    if (false && HW.ShaderBinarySupported && FS.exist(full_path))
     {
         IReader* file = FS.r_open(full_path);
         if (file->length() > 8)
@@ -574,6 +630,50 @@ HRESULT CRender::shader_compile(LPCSTR name, IReader* fs, LPCSTR pFunctionName,
             }
         }
         file->close();
+    }
+
+    if (!program)
+    {
+        EShLanguage stage = EShLangCount;
+        switch (pTarget[0])
+        {
+        case 'p': stage = EShLangFragment; break;
+        case 'v': stage = EShLangVertex; break;
+        case 'g': stage = EShLangGeometry; break;
+        case 'c': stage = EShLangCompute; break;
+        case 'h': stage = EShLangTessControl; break;
+        case 'd': stage = EShLangTessEvaluation; break;
+        default: NODEFAULT;
+        }
+
+        Includer includer;
+        glslang::TShader shader(stage);
+        glslang::TProgram program;
+        shader.setEntryPoint(pFunctionName);
+        shader.setHlslIoMapping(true);
+        shader.setEnvInput(glslang::EShSourceHlsl, stage, glslang::EShClientOpenGL, 410);
+        shader.setEnvClient(glslang::EShClientOpenGL, glslang::EShTargetOpenGL_450);
+        shader.setAutoMapBindings(true);
+        shader.setAutoMapLocations(true);
+
+        // Enable SPIR - V rules when parsing HLSL
+        EShMessages messages = (EShMessages)(EShMsgRelaxedErrors | EShMsgReadHlsl | EShMsgHlslOffsets | EShMsgHlslLegalization);
+
+        pcstr strings[2];
+        strings[0] = (pcstr)fs->pointer();
+        strings[1] = nullptr;
+        xr_string preamble = options.get_preamble();
+        shader.setPreamble(preamble.c_str());
+        shader.setStrings(strings, 1);
+        auto _result = shader.parse(&glslang::DefaultTBuiltInResource, 410, ECoreProfile, false, false, messages, includer);
+        if (_result)
+            ;
+        else
+        {
+            Log("! ", name);
+            Log("! error: ", shader.getInfoLog());
+            Log("! debug: ", shader.getInfoDebugLog());
+        }
     }
 
     // Failed to use cached shader, then:
