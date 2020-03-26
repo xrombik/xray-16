@@ -4,6 +4,9 @@
 #include "Layers/xrRender/ShaderResourceTraits.h"
 #include "xrCore/FileCRC32.h"
 
+#include <shaderc/shaderc.hpp>
+#include <shaderc/spvc.hpp>
+
 void CRender::addShaderOption(const char* name, const char* value)
 {
     m_ShaderOptions += "#define ";
@@ -103,6 +106,63 @@ static GLuint create_shader(cpcstr pTarget, pcstr* buffer, size_t const buffer_s
         return 0;
     }
 }
+
+class ShadercIncluder : public shaderc::CompileOptions::IncluderInterface
+{
+    shaderc_include_result* createResult(const char* headerName, IReader& file)
+    {
+        // duplicate and zero-terminate
+        const size_t size = file.length();
+        char* data = xr_alloc<char>(size + 1);
+        CopyMemory(data, file.pointer(), size);
+        data[size] = 0;
+        file.close();
+
+        shaderc_include_result* result = new shaderc_include_result
+        {
+            /*.source_name =*/ headerName,
+            /*.source_name_length =*/ xr_strlen(headerName),
+            /*.content =*/ data,
+            /*.content_length =*/ size,
+            /*.user_data =*/ data
+        };
+        return result;
+    }
+
+public:
+    // Handles shaderc_include_resolver_fn callbacks.
+    shaderc_include_result* GetInclude(const char* requested_source, shaderc_include_type type,
+        const char* /*requesting_source*/, size_t /*include_depth*/) override
+    {
+        switch (type)
+        {
+        case shaderc_include_type_relative:
+        {
+            string_path pname;
+            strconcat(pname, GEnv.Render->getShaderPath(), requested_source);
+            IReader* file = FS.r_open("$game_shaders$", pname);
+            if (file)
+                return createResult(requested_source, *file);
+            break;
+        }
+        case shaderc_include_type_standard:
+        {
+            // possibly in shared directory or somewhere else - open directly
+            IReader* file = FS.r_open("$game_shaders$", requested_source);
+            if (file)
+                return createResult(requested_source, *file);
+        }
+        }
+        return nullptr;
+    }
+
+    // Handles shaderc_include_result_release_fn callbacks.
+    void ReleaseInclude(shaderc_include_result* data) override
+    {
+        xr_free(data->user_data);
+        xr_delete(data);
+    }
+};
 
 class shader_name_holder
 {
@@ -276,7 +336,6 @@ HRESULT CRender::shader_compile(LPCSTR name, IReader* fs, LPCSTR pFunctionName,
     string32 c_sun_quality;
 
     // TODO: OGL: Implement these parameters.
-    UNUSED(pFunctionName);
     UNUSED(Flags);
 
     // options:
@@ -547,7 +606,7 @@ HRESULT CRender::shader_compile(LPCSTR name, IReader* fs, LPCSTR pFunctionName,
     }
 
     GLuint program = 0;
-    if (HW.ShaderBinarySupported && FS.exist(full_path))
+    if (false && HW.ShaderBinarySupported && FS.exist(full_path))
     {
         IReader* file = FS.r_open(full_path);
         if (file->length() > 8)
@@ -578,6 +637,79 @@ HRESULT CRender::shader_compile(LPCSTR name, IReader* fs, LPCSTR pFunctionName,
 
     // Failed to use cached shader, then:
     if (!program)
+    {
+        shaderc_shader_kind type = static_cast<shaderc_shader_kind>(-1);
+        switch (pTarget[0])
+        {
+        case 'p': type = shaderc_fragment_shader; break;
+        case 'v': type = shaderc_vertex_shader; break;
+        case 'g': type = shaderc_geometry_shader; break;
+        case 'c': type = shaderc_compute_shader; break;
+        case 'h': type = shaderc_tess_control_shader; break;
+        case 'd': type = shaderc_tess_evaluation_shader; break;
+        default: NODEFAULT;
+        }
+
+        shaderc::CompileOptions coptions;
+        coptions.SetOptimizationLevel(shaderc_optimization_level_performance);
+        coptions.SetSourceLanguage(shaderc_source_language_hlsl);
+        coptions.SetTargetEnvironment(shaderc_target_env_opengl, shaderc_env_version_opengl_4_5);
+        coptions.SetIncluder(xr_make_unique<ShadercIncluder>(ShadercIncluder()));
+        coptions.SetAutoBindUniforms(true);
+        coptions.SetHlslIoMapping(true);
+        coptions.SetAutoMapLocations(true);
+
+        const shaderc::Compiler compiler;
+        auto spirv = compiler.CompileGlslToSpv((pcstr)fs->pointer(), fs->length(), type, name, pFunctionName, coptions);
+        if (spirv.GetCompilationStatus() != shaderc_compilation_status_success)
+        {
+            Log(spirv.GetErrorMessage().c_str());
+        }
+        else
+        {
+            u32* spirvBinary = (u32*)spirv.begin();
+            const size_t spirvSize = std::distance(spirv.begin(), spirv.end());
+
+            // If SPIR-V supported
+            if (false)
+            {
+                GLenum binaryFormat = GL_SHADER_BINARY_FORMAT_SPIR_V;
+                program = create_shader(pTarget, (pcstr*)spirv.begin(),
+                                        spirvSize, filename, result, &binaryFormat);
+            }
+            
+            if (!program)
+            {
+                shaderc_spvc::CompileOptions spvcOptions;
+                spvcOptions.SetEntryPoint(pFunctionName);
+                spvcOptions.SetSourceEnvironment(shaderc_target_env_opengl, shaderc_env_version_opengl_4_5);
+                spvcOptions.SetTargetEnvironment(shaderc_target_env_opengl, shaderc_env_version_opengl_4_5);
+                spvcOptions.SetSeparateShaderObjects(true);
+                spvcOptions.SetOptimize(true);
+
+                shaderc_spvc::Context context;
+                auto spvcResult = context.InitializeForGlsl(spirvBinary, spirvSize, spvcOptions);
+                shaderc_spvc::CompilationResult compilationResult;
+                spvcResult = context.CompileShader(&compilationResult);
+                std::string output;
+                compilationResult.GetStringOutput(&output);
+                if (spvcResult != shaderc_spvc_status_success)
+                {
+                    Log(context.GetMessages().c_str());
+                }
+                else
+                {
+                    pcstr data[2];
+                    data[0] = output.data();
+                    data[1] = nullptr;
+                    program = create_shader(pTarget, data, 1, filename, result, nullptr);
+                }
+            }
+        }
+    }
+
+    // Failed to use cached shader, then:
+    if (false && !program)
     {
         // Compile sources list
         shader_sources_manager sources(name);

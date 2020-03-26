@@ -89,9 +89,11 @@ BOOL R_constant_table::parse(void* _desc, u32 destination)
             fatal("GL_FLOAT_MAT: unsupported number of dimensions");
             break;
         case GL_FLOAT_MAT4x2:
+        case GL_FLOAT_MAT2x4:
             r_type = RC_2x4;
             break;
         case GL_FLOAT_MAT4x3:
+        case GL_FLOAT_MAT3x4:
             r_type = RC_3x4;
             break;
         case GL_FLOAT_MAT4:
