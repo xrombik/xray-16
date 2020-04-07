@@ -125,13 +125,10 @@ bool file_handle_internal(pcstr file_name, size_t& size, int& file_handle)
 {
     if (open_internal(file_name, file_handle))
     {
-        Sleep(1);
-        if (open_internal(file_name, file_handle))
-            return (false);
+        return false;
     }
-
     size = _filelength(file_handle);
-    return (true);
+    return true;
 }
 #endif // EDITOR
 
