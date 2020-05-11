@@ -1,5 +1,19 @@
 cmake_minimum_required(VERSION 2.8.0)
+# Redirecting the default installation path /usr/local to /usr no need to use -DCMAKE_INSTALL_PREFIX =/usr
+set(CMAKE_INSTALL_PREFIX /usr)
 project(OpenXRay)
+
+# Installation paths
+include(GNUInstallDirs)
+
+set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+include(${PROJECT_SOURCE_DIR}/cmake/utils.cmake)
+
+# Output all libraries and executable to one folder
+set(COMPILE_OUTPUT_FOLDER ${CMAKE_SOURCE_DIR}/bin/${ARCH_TYPE}/${CMAKE_BUILD_TYPE})
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${COMPILE_OUTPUT_FOLDER})
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${COMPILE_OUTPUT_FOLDER})
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${COMPILE_OUTPUT_FOLDER})
 
 message(STATUS "CMAKE_SYSTEM_PROCESSOR: " ${CMAKE_SYSTEM_PROCESSOR})
 if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "armv*")
@@ -10,19 +24,14 @@ elseif(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "e2k")
 	set(PROJECT_PLATFORM_E2K TRUE)
 endif()
 
-include(${PROJECT_SOURCE_DIR}/cmake/utils.cmake)
-
-set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-
 if(NOT WIN32)
-	set(CMAKE_INSTALL_PREFIX "") # Skip all *nix-style installing for a while. Use DESTDIR
     IF(EXISTS "${CMAKE_ROOT}/Modules/CPack.cmake")
         set(CPACK_PACKAGE_NAME "openxray")
         set(CPACK_FILE_NAME "openxray")
         set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")
         set(CPACK_PACKAGE_VERSION "1.6.02")
-        set(CPACK_PACKAGE_CONTACT "lya Orlov <eagleivg@mail.ru>")
-        set(CPACK_PACKAGE_DESCRIPTION "X-Ray Engine 1.6 expansion")
+        set(CPACK_PACKAGE_CONTACT "OpenXRay <openxray@yahoo.com>")
+        set(CPACK_PACKAGE_DESCRIPTION "OpenXRay is an improved version of the X-Ray Engine – game engine used in world famous S.T.A.L.K.E.R. game series by GSC Game World.")
         set(CPACK_PACKAGE_DESCRIPTION_SUMMARY ${CPACK_PACKAGE_DESCRIPTION})
         set(CPACK_DEBIAN_PACKAGE_SECTION "games")
         set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/OpenXRay/xray-16")
@@ -227,4 +236,12 @@ if (UNIX)
 
         add_custom_target(uninstall COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
     endif()
+endif()
+
+get_property(LIB64 GLOBAL PROPERTY FIND_LIBRARY_USE_LIB64_PATHS)
+
+if ("${LIB64}" STREQUAL "TRUE")
+    set(LIBSUFFIX 64)
+else()
+    set(LIBSUFFIX "")
 endif()
